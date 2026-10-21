@@ -20,10 +20,28 @@ pipeline {
             }
         }
 
-        stage('Build Container Image') {
+        stage('Publish Container Image') {
             steps {
-                sh './mvnw -B -DskipTests jib:buildTar'
-                sh 'rm -f target/jib-image.tar'
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKERHUB_USERNAME',
+                    passwordVariable: 'DOCKERHUB_TOKEN'
+                )]) {
+                    sh '''
+                        set +x
+                        umask 077
+                        export DOCKER_CONFIG="$(mktemp -d)"
+                        trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+
+                        AUTH="$(printf '%s' "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" | base64 | tr -d '\\n')"
+
+                        printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}}}\\n' "$AUTH" > "$DOCKER_CONFIG/config.json"
+
+                        ./mvnw -B -DskipTests \
+                          -Dimage="docker.io/${DOCKERHUB_USERNAME}/spring-petclinic-rest:${BUILD_NUMBER}" \
+                          jib:build
+                    '''
+                }
             }
         }
     }
@@ -37,11 +55,11 @@ pipeline {
         }
 
         success {
-            echo 'Tests, application build, and container image build succeeded!'
+            echo 'Tests passed and container image published!'
         }
 
         failure {
-            echo 'Build failed. Check the Jenkins console output.'
+            echo 'Pipeline failed. Check the Jenkins console output.'
         }
     }
 }
