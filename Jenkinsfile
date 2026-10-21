@@ -1,10 +1,9 @@
-
 pipeline {
     agent any
 
     options {
         timestamps()
-        timeout(time: 20, unit: 'MINUTES')
+        timeout(time: 40, unit: 'MINUTES')
     }
 
     stages {
@@ -20,6 +19,13 @@ pipeline {
                 sh './mvnw -B clean verify'
             }
         }
+
+        stage('Build Container Image') {
+            steps {
+                sh './mvnw -B -DskipTests jib:buildTar'
+                sh 'rm -f target/jib-image.tar'
+            }
+        }
     }
 
     post {
@@ -31,7 +37,7 @@ pipeline {
         }
 
         success {
-            echo 'Spring PetClinic tests and build succeeded!'
+            echo 'Tests, application build, and container image build succeeded!'
         }
 
         failure {
